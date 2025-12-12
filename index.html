@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Interaktive Video-Installation</title>
+  <style>
+    :root{
+      --glass-bg: rgba(255,255,255,.10);
+      --glass-border: rgba(255,255,255,.25);
+      --glass-glow: rgba(255,255,255,.35);
+      --text: rgba(255,255,255,.92);
+      --muted: rgba(255,255,255,.70);
+      --radius: 16px;
+      --blur: 14px;
+      --pad: 14px;
+    }
+
+    html, body { margin:0; padding:0; background:#000; height:100%; overflow:hidden; }
+    #stage { position:fixed; inset:0; background:#000; }
+
+    video {
+      width:100vw; height:100vh;
+      object-fit:cover;
+      display:block;
+      background:#000;
+    }
+
+    /* UI layer */
+    #ui {
+      position:fixed; left:0; right:0; bottom:0;
+      display:flex; justify-content:center;
+      padding: 0 18px 18px;
+      z-index: 10;
+      pointer-events:none; /* allow overlay/popup to manage clicks */
+    }
+
+    .panel {
+      pointer-events:auto;
+      width:min(980px, calc(100vw - 36px));
+      display:flex;
+      gap: 12px;
+      align-items:center;
+      padding: 12px;
+      border-radius: var(--radius);
+
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      box-shadow: 0 0 28px rgba(255,255,255,.10), 0 0 16px rgba(255,255,255,.08);
+      backdrop-filter: blur(var(--blur));
+      -webkit-backdrop-filter: blur(var(--blur));
+    }
+
+    .panel .left {
+      flex: 1;
+      display:flex;
+      flex-direction:column;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    label {
+      font: 500 13px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color: var(--muted);
+      letter-spacing: .02em;
+    }
+
+    input[type="text"]{
+      width:100%;
+      box-sizing:border-box;
+      color: var(--text);
+      background: rgba(0,0,0,.20);
+      border: 1px solid rgba(255,255,255,.22);
+      border-radius: calc(var(--radius) - 6px);
+      padding: 12px 12px;
+      font: 500 16px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      outline: none;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
+    }
+    input[type="text"]::placeholder { color: rgba(255,255,255,.45); }
+    input[type="text"]:focus{
+      border-color: rgba(160,200,255,.65);
+      box-shadow: 0 0 0 3px rgba(160,200,255,.18), 0 0 26px rgba(255,255,255,.10);
+    }
+
+    .actions {
+      display:flex; gap: 10px; align-items:center;
+    }
+
+    button {
+      border: 1px solid rgba(255,255,255,.25);
+      background: rgba(255,255,255,.10);
+      color: var(--text);
+      border-radius: calc(var(--radius) - 6px);
+      padding: 12px 14px;
+      cursor:pointer;
+      font: 600 14px/1 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      letter-spacing: .02em;
+      box-shadow: 0 0 24px rgba(255,255,255,.08);
+      transition: transform .15s ease, box-shadow .15s ease, background .15s ease;
+      user-select:none;
+      white-space:nowrap;
+    }
+    button:hover{
+      transform: translateY(-1px);
+      background: rgba(255,255,255,.14);
+      box-shadow: 0 0 32px rgba(255,255,255,.12);
+    }
+
+    .mini {
+      font: 500 12px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color: var(--muted);
+      white-space:nowrap;
+    }
+
+    /* Start overlay (autoplay policy) */
+    #startOverlay{
+      position:fixed; inset:0;
+      display:flex; align-items:center; justify-content:center;
+      z-index: 30;
+      background: rgba(0,0,0,.55);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+    #startOverlay .card{
+      width:min(560px, calc(100vw - 40px));
+      padding: 18px;
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.10);
+      border: 1px solid rgba(255,255,255,.25);
+      box-shadow: 0 0 40px rgba(255,255,255,.10);
+      color: var(--text);
+      font: 500 16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      text-align:center;
+    }
+    #startOverlay .card p{ margin: 0 0 14px; color: rgba(255,255,255,.85); }
+    #startOverlay .card .hint{ margin:0; font-size: 13px; color: rgba(255,255,255,.70); }
+
+    /* Popup modal */
+    #popupOverlay{
+      position:fixed; inset:0;
+      display:none;
+      align-items:center; justify-content:center;
+      z-index: 40;
+      background: rgba(0,0,0,.55);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      padding: 18px;
+    }
+    #popupOverlay.show{ display:flex; }
+
+    #popup{
+      width:min(720px, calc(100vw - 36px));
+      border-radius: var(--radius);
+      background: rgba(255,255,255,.12);
+      border: 1px solid rgba(255,255,255,.28);
+      box-shadow: 0 0 46px rgba(255,255,255,.12);
+      color: var(--text);
+      padding: 16px;
+      transform: scale(.98);
+      opacity: 0;
+      transition: transform 160ms ease, opacity 160ms ease;
+    }
+    #popupOverlay.show #popup{ transform: scale(1); opacity: 1; }
+
+    #popupHeader{
+      display:flex; align-items:center; justify-content:space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    #popupTitle{
+      font: 700 16px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      letter-spacing:.02em;
+    }
+    #popupText{
+      font: 500 14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color: rgba(255,255,255,.86);
+      white-space: pre-wrap;
+      margin: 0;
+    }
+    #popupClose{
+      padding: 10px 12px;
+    }
+
+    @media (max-width: 520px){
+      .panel{ flex-direction:column; align-items:stretch; }
+      .actions{ justify-content:space-between; }
+      .mini{ text-align:right; }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="stage">
+    <video id="videoPlayer" playsinline></video>
+  </div>
+
+  <!-- Persistent background music -->
+  <audio id="bgm" src="Hintergrundmusik.mp3" loop></audio>
+
+  <!-- UI: glass input + controls -->
+  <div id="ui">
+    <div class="panel" role="region" aria-label="Interaktion">
+      <div class="left">
+        <label for="userInput">Eingabe (Enter = nächstes Video)</label>
+        <input id="userInput" type="text" placeholder="Tippe hier … und drücke Enter" autocomplete="off" />
+      </div>
+      <div class="actions">
+        <button id="submitBtn" type="button">Absenden</button>
+        <button id="muteBtn" type="button">Ton an</button>
+        <div class="mini" id="status">Video 01 / 19</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Start overlay for user gesture -->
+  <div id="startOverlay">
+    <div class="card">
+      <p>Tippe/Klicke einmal, um die Installation zu starten (Video + Musik).</p>
+      <p class="hint">Browser erlauben Audio erst nach Interaktion.</p>
+      <button id="startBtn" type="button">Start</button>
+    </div>
+  </div>
+
+  <!-- Pop-up modal -->
+  <div id="popupOverlay" aria-hidden="true">
+    <div id="popup" role="dialog" aria-modal="true" aria-label="Pop-up">
+      <div id="popupHeader">
+        <div id="popupTitle">Hinweis</div>
+        <button id="popupClose" type="button">Schließen</button>
+      </div>
+      <p id="popupText"></p>
+    </div>
+  </div>
+
+  <script>
+    /***************
+     * EDITABLE SETTINGS
+     ***************/
+    const TOTAL_VIDEOS = 19;
+
+    // Pop-up frequency control (choose ONE strategy or combine):
+    const POPUP_COOLDOWN_STEPS = 3;   // at most 1 popup every N "next"-triggers
+    const POPUP_PROBABILITY = 0.20;   // only show popup with this probability (0..1)
+
+    // Audio levels
+    const BGM_VOLUME = 0.35;
+    const VIDEO_VOLUME = 1.0;
+
+    // If true, do not advance on empty input (forces people to type something)
+    const REQUIRE_NONEMPTY_INPUT = false;
+
+    /***************
+     * POPUP CONTENT (EDIT HERE)
+     * Map by video number (1..19). Only defined entries can appear.
+     ***************/
+    const POPUPS = {
+      2:  { title: "System", text: "Signal erkannt.\nEingabe wird verarbeitet …" },
+      6:  { title: "Hinweis", text: "Bitte näher an den Bildschirm treten." },
+      11: { title: "Protokoll", text: "Unbekannter Parameter. Fortfahren?" },
+      17: { title: "Status", text: "Verbindung instabil. Eingabe erneut senden." }
+    };
+
+    /***************
+     * OPTIONAL: store visitor inputs (for logging / later use)
+     ***************/
+    const INPUT_LOG = []; // {videoBefore: n, text: "...", ts: Date}
+
+    /***************
+     * Elements
+     ***************/
+    const video = document.getElementById('videoPlayer');
+    const bgm = document.getElementById('bgm');
+
+    const input = document.getElementById('userInput');
+    const submitBtn = document.getElementById('submitBtn');
+    const muteBtn = document.getElementById('muteBtn');
+    const status = document.getElementById('status');
+
+    const startOverlay = document.getElementById('startOverlay');
+    const startBtn = document.getElementById('startBtn');
+
+    const popupOverlay = document.getElementById('popupOverlay');
+    const popupTitle = document.getElementById('popupTitle');
+    const popupText = document.getElementById('popupText');
+    const popupClose = document.getElementById('popupClose');
+
+    /***************
+     * State
+     ***************/
+    let currentIndex = 1;      // 1..19
+    let audioEnabled = false;  // becomes true after user gesture
+    let stepsSincePopup = POPUP_COOLDOWN_STEPS; // allow popup early if rules say so
+
+    /***************
+     * Helpers
+     ***************/
+    function pad2(n){ return String(n).padStart(2,'0'); }
+    function videoFile(n){ return `Video${pad2(n)}.mp4`; }
+
+    function setStatus(){
+      status.textContent = `Video ${pad2(currentIndex)} / ${pad2(TOTAL_VIDEOS)}`;
+    }
+
+    async function tryPlayMedia(){
+      // Try to play both; if blocked, it will reject (handled by overlay flow)
+      video.muted = !audioEnabled;
+      video.volume = VIDEO_VOLUME;
+
+      bgm.volume = BGM_VOLUME;
+      bgm.muted = !audioEnabled;
+
+      const vp = video.play();
+      const ap = bgm.play();
+
+      // Avoid unhandled promise rejection
+      await Promise.allSettled([vp, ap]);
+    }
+
+    function loadVideo(n){
+      currentIndex = n;
+      setStatus();
+
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+
+      video.src = videoFile(n);
+      video.loop = true;              // Installation: loop current clip until next Enter
+      video.playsInline = true;
+
+      // Start playback respecting audioEnabled
+      tryPlayMedia();
+
+      // Consider popup rules *after* switching
+      maybeShowPopupFor(n);
+    }
+
+    function canShowPopup(){
+      if (stepsSincePopup < POPUP_COOLDOWN_STEPS) return false;
+      if (Math.random() > POPUP_PROBABILITY) return false;
+      return true;
+    }
+
+    function maybeShowPopupFor(videoNumber){
+      const p = POPUPS[videoNumber];
+      if (!p) { stepsSincePopup++; return; }
+
+      if (!canShowPopup()) { stepsSincePopup++; return; }
+
+      // Show popup
+      popupTitle.textContent = p.title ?? "Hinweis";
+      popupText.textContent = p.text ?? "";
+      popupOverlay.classList.add('show');
+      popupOverlay.setAttribute('aria-hidden', 'false');
+      stepsSincePopup = 0;
+
+      // focus close for accessibility / controller setups
+      setTimeout(() => popupClose.focus(), 0);
+    }
+
+    function closePopup(){
+      popupOverlay.classList.remove('show');
+      popupOverlay.setAttribute('aria-hidden', 'true');
+      // Return focus to input
+      setTimeout(() => input.focus(), 0);
+    }
+
+    function advance(){
+      const text = (input.value || "").trim();
+
+      if (REQUIRE_NONEMPTY_INPUT && text.length === 0) {
+        // subtle cue: shake could be added; for now focus + placeholder remain
+        input.focus();
+        return;
+      }
+
+      // Log what was typed before moving on
+      INPUT_LOG.push({ videoBefore: currentIndex, text, ts: new Date() });
+
+      // Clear input for next prompt feel
+      input.value = "";
+
+      // Next index (wrap around)
+      const next = (currentIndex >= TOTAL_VIDEOS) ? 1 : currentIndex + 1;
+      loadVideo(next);
+    }
+
+    function setAudioEnabled(on){
+      audioEnabled = !!on;
+      muteBtn.textContent = audioEnabled ? "Ton aus" : "Ton an";
+      tryPlayMedia();
+    }
+
+    /***************
+     * Event wiring
+     ***************/
+    submitBtn.addEventListener('click', advance);
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        advance();
+      }
+    });
+
+    muteBtn.addEventListener('click', () => setAudioEnabled(!audioEnabled));
+
+    startBtn.addEventListener('click', () => {
+      // User gesture: enable audio and start
+      setAudioEnabled(true);
+      startOverlay.style.display = 'none';
+      input.focus();
+    });
+
+    // If user clicks anywhere, also treat as "start" (kiosk-friendly)
+    window.addEventListener('pointerdown', () => {
+      if (startOverlay.style.display !== 'none') {
+        setAudioEnabled(true);
+        startOverlay.style.display = 'none';
+        input.focus();
+      }
+    }, { once: true });
+
+    popupClose.addEventListener('click', closePopup);
+    popupOverlay.addEventListener('click', (e) => {
+      if (e.target === popupOverlay) closePopup();
+    });
+
+    /***************
+     * Boot
+     ***************/
+    setStatus();
+    loadVideo(1);
+
+    // Start with muted video for autoplay safety until user gesture
+    setAudioEnabled(false);
+  </script>
+</body>
+</html>
