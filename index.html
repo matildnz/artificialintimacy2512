@@ -273,7 +273,6 @@
     const input = document.getElementById('userInput');
     const submitBtn = document.getElementById('submitBtn');
     const muteBtn = document.getElementById('muteBtn');
-    const status = document.getElementById('status');
 
     const startOverlay = document.getElementById('startOverlay');
     const startBtn = document.getElementById('startBtn');
@@ -296,9 +295,6 @@
     function pad2(n){ return String(n).padStart(2,'0'); }
     function videoFile(n){ return `Video${pad2(n)}.mp4`; }
 
-    function setStatus(){
-      status.textContent = `Video ${pad2(currentIndex)} / ${pad2(TOTAL_VIDEOS)}`;
-    }
 
     async function tryPlayMedia(){
       // Try to play both; if blocked, it will reject (handled by overlay flow)
@@ -428,7 +424,6 @@
     /***************
      * Boot
      ***************/
-    setStatus();
     loadVideo(1);
 
     // Start with muted video for autoplay safety until user gesture
