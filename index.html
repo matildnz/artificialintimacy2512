@@ -8,12 +8,10 @@
     :root{
       --glass-bg: rgba(255,255,255,.10);
       --glass-border: rgba(255,255,255,.25);
-      --glass-glow: rgba(255,255,255,.35);
       --text: rgba(255,255,255,.92);
       --muted: rgba(255,255,255,.70);
       --radius: 16px;
       --blur: 14px;
-      --pad: 14px;
     }
 
     html, body { margin:0; padding:0; background:#000; height:100%; overflow:hidden; }
@@ -32,7 +30,7 @@
       display:flex; justify-content:center;
       padding: 0 18px 18px;
       z-index: 10;
-      pointer-events:none; /* allow overlay/popup to manage clicks */
+      pointer-events:none;
     }
 
     .panel {
@@ -53,16 +51,7 @@
 
     .panel .left {
       flex: 1;
-      display:flex;
-      flex-direction:column;
-      gap: 6px;
       min-width: 0;
-    }
-
-    label {
-      font: 500 13px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      color: var(--muted);
-      letter-spacing: .02em;
     }
 
     input[type="text"]{
@@ -105,12 +94,6 @@
       transform: translateY(-1px);
       background: rgba(255,255,255,.14);
       box-shadow: 0 0 32px rgba(255,255,255,.12);
-    }
-
-    .mini {
-      font: 500 12px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      color: var(--muted);
-      white-space:nowrap;
     }
 
     /* Start overlay (autoplay policy) */
@@ -178,14 +161,11 @@
       white-space: pre-wrap;
       margin: 0;
     }
-    #popupClose{
-      padding: 10px 12px;
-    }
+    #popupClose{ padding: 10px 12px; }
 
     @media (max-width: 520px){
       .panel{ flex-direction:column; align-items:stretch; }
       .actions{ justify-content:space-between; }
-      .mini{ text-align:right; }
     }
   </style>
 </head>
@@ -237,7 +217,7 @@
      ***************/
     const TOTAL_VIDEOS = 19;
 
-    // Pop-up frequency control (choose ONE strategy or combine):
+    // Pop-up frequency control:
     const POPUP_COOLDOWN_STEPS = 3;   // at most 1 popup every N "next"-triggers
     const POPUP_PROBABILITY = 0.20;   // only show popup with this probability (0..1)
 
@@ -245,24 +225,23 @@
     const BGM_VOLUME = 0.35;
     const VIDEO_VOLUME = 1.0;
 
-    // If true, do not advance on empty input (forces people to type something)
+    // If true, do not advance on empty input
     const REQUIRE_NONEMPTY_INPUT = false;
 
     /***************
      * POPUP CONTENT (EDIT HERE)
-     * Map by video number (1..19). Only defined entries can appear.
      ***************/
     const POPUPS = {
-      2:  { title: "System", text: "Signal erkannt.\nEingabe wird verarbeitet …" },
+      2:  { title: "System",  text: "Signal erkannt.\nEingabe wird verarbeitet …" },
       6:  { title: "Hinweis", text: "Bitte näher an den Bildschirm treten." },
       11: { title: "Protokoll", text: "Unbekannter Parameter. Fortfahren?" },
-      17: { title: "Status", text: "Verbindung instabil. Eingabe erneut senden." }
+      17: { title: "Status",  text: "Verbindung instabil. Eingabe erneut senden." }
     };
 
     /***************
-     * OPTIONAL: store visitor inputs (for logging / later use)
+     * OPTIONAL: store visitor inputs
      ***************/
-    const INPUT_LOG = []; // {videoBefore: n, text: "...", ts: Date}
+    const INPUT_LOG = []; // {videoBefore: n, text: \"...\", ts: Date}
 
     /***************
      * Elements
@@ -287,7 +266,7 @@
      ***************/
     let currentIndex = 1;      // 1..19
     let audioEnabled = false;  // becomes true after user gesture
-    let stepsSincePopup = POPUP_COOLDOWN_STEPS; // allow popup early if rules say so
+    let stepsSincePopup = POPUP_COOLDOWN_STEPS;
 
     /***************
      * Helpers
@@ -295,9 +274,7 @@
     function pad2(n){ return String(n).padStart(2,'0'); }
     function videoFile(n){ return `Video${pad2(n)}.mp4`; }
 
-
     async function tryPlayMedia(){
-      // Try to play both; if blocked, it will reject (handled by overlay flow)
       video.muted = !audioEnabled;
       video.volume = VIDEO_VOLUME;
 
@@ -306,27 +283,21 @@
 
       const vp = video.play();
       const ap = bgm.play();
-
-      // Avoid unhandled promise rejection
       await Promise.allSettled([vp, ap]);
     }
 
     function loadVideo(n){
       currentIndex = n;
-      setStatus();
 
       video.pause();
       video.removeAttribute('src');
       video.load();
 
       video.src = videoFile(n);
-      video.loop = true;              // Installation: loop current clip until next Enter
+      video.loop = true;
       video.playsInline = true;
 
-      // Start playback respecting audioEnabled
       tryPlayMedia();
-
-      // Consider popup rules *after* switching
       maybeShowPopupFor(n);
     }
 
@@ -339,24 +310,20 @@
     function maybeShowPopupFor(videoNumber){
       const p = POPUPS[videoNumber];
       if (!p) { stepsSincePopup++; return; }
-
       if (!canShowPopup()) { stepsSincePopup++; return; }
 
-      // Show popup
       popupTitle.textContent = p.title ?? "Hinweis";
       popupText.textContent = p.text ?? "";
       popupOverlay.classList.add('show');
       popupOverlay.setAttribute('aria-hidden', 'false');
       stepsSincePopup = 0;
 
-      // focus close for accessibility / controller setups
       setTimeout(() => popupClose.focus(), 0);
     }
 
     function closePopup(){
       popupOverlay.classList.remove('show');
       popupOverlay.setAttribute('aria-hidden', 'true');
-      // Return focus to input
       setTimeout(() => input.focus(), 0);
     }
 
@@ -364,18 +331,13 @@
       const text = (input.value || "").trim();
 
       if (REQUIRE_NONEMPTY_INPUT && text.length === 0) {
-        // subtle cue: shake could be added; for now focus + placeholder remain
         input.focus();
         return;
       }
 
-      // Log what was typed before moving on
       INPUT_LOG.push({ videoBefore: currentIndex, text, ts: new Date() });
-
-      // Clear input for next prompt feel
       input.value = "";
 
-      // Next index (wrap around)
       const next = (currentIndex >= TOTAL_VIDEOS) ? 1 : currentIndex + 1;
       loadVideo(next);
     }
@@ -401,13 +363,11 @@
     muteBtn.addEventListener('click', () => setAudioEnabled(!audioEnabled));
 
     startBtn.addEventListener('click', () => {
-      // User gesture: enable audio and start
       setAudioEnabled(true);
       startOverlay.style.display = 'none';
       input.focus();
     });
 
-    // If user clicks anywhere, also treat as "start" (kiosk-friendly)
     window.addEventListener('pointerdown', () => {
       if (startOverlay.style.display !== 'none') {
         setAudioEnabled(true);
@@ -425,8 +385,6 @@
      * Boot
      ***************/
     loadVideo(1);
-
-    // Start with muted video for autoplay safety until user gesture
     setAudioEnabled(false);
   </script>
 </body>
